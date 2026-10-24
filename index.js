@@ -1,6 +1,6 @@
 import express from 'express'
 import dotenv from 'dotenv'
-import { bootstrab } from './src/app.controller';
+import { bootstrab } from './src/app.js';
 
 const app = express();
 dotenv.config()
