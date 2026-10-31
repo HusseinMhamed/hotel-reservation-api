@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-let roles = ['admin','manager','receptionist']
+export const ROLES = ['admin','manager','receptionist']
 
 const userSchema = mongoose.Schema({
     name:{
@@ -26,9 +26,9 @@ const userSchema = mongoose.Schema({
         // minlength:[8,'min length is 8'],
     },role:{
         type:String,
-        enum:roles,
+        enum:ROLES,
         required: true,
-        default:roles[2]
+        default:ROLES[2]
     },isActive:{
         type:Boolean,
         default:true
@@ -37,5 +37,5 @@ const userSchema = mongoose.Schema({
     timestamps:true
 })
 
-export const usermodel = mongoose.model('user',userSchema);
+export const User = mongoose.model('user',userSchema);
 
