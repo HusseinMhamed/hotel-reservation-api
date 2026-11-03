@@ -6,4 +6,4 @@ import { asyncHandler } from "../../util/asyncHandler.js";
 
 export const userRouter = Router();
 
-userRouter.post('/create',validator({body:createUserSchema}),asyncHandler(userService.createUser))
+userRouter.post('/create',validator({body:createUserSchema}),asyncHandler(userService.signUp))

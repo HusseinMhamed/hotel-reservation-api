@@ -7,8 +7,8 @@ const userSchema = mongoose.Schema({
         type:String,
         required:true,
         trim:true,
-        minlength:[3,"minimum length is 3"],
-        maxlength:[80,"maximum length is 80"]
+        minLength:[3,"minimum length is 3"],
+        maxLength:[80,"maximum length is 80"]
     },email:{
         type:String,
         required: true,

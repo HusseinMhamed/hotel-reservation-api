@@ -9,8 +9,8 @@ const roomSchema = mongoose.Schema({
         required: [true, "roomNumber is required"],
         unique:true,
         trim:true,
-        minlength:[2,"roomNumber minimum length is 2"],
-        maxlength:[10,"roomNumber maximum length is 10"],
+        minLength:[2,"roomNumber minimum length is 2"],
+        maxLength:[10,"roomNumber maximum length is 10"],
         uppercase: true, match: [/^[A-Za-z0-9-]+$/, "roomNumber may contain only letters, numbers and hyphens"]
     },type:{
         type:String,
