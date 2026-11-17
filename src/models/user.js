@@ -31,7 +31,7 @@ const userSchema = mongoose.Schema({
         default:ROLES[2]
     },isActive:{
         type:Boolean,
-        default:true
+        default:false
     }
 },{
     timestamps:true

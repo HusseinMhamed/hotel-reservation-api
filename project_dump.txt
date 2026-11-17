@@ -1,0 +1,411 @@
+﻿
+===== E:\learn web development\hotel reception\.gitignore =====
+node_modules/
+.env
+
+===== E:\learn web development\hotel reception\index.js =====
+import express from 'express'
+import { bootstrab } from './src/app.js';
+import { env } from './src/config/env.js';
+const app = express();
+
+const port = env.PORT || 7000
+
+bootstrab(app,express);
+
+
+app.listen(port,()=>{
+    console.log(`app is listening on Port ${port}`)
+})
+
+===== E:\learn web development\hotel reception\package.json =====
+{
+  "name": "hotel-reception",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev":"nodemon index.js",
+    "test":"jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "joi": "^18.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.11.4"
+  },
+  "devDependencies": {
+    "@types/mongoose": "^5.11.96"
+  }
+}
+
+===== E:\learn web development\hotel reception\src\app.js =====
+import { connectionDB } from "./config/database.js"
+import { userRouter } from "./modules/user/user.controller.js";
+import { globalErrorHandler } from "./util/globalErrorHandler.js";
+import cookieParser from "cookie-parser";
+export const bootstrab =async (app,express)=>{
+    app.use(express.json());
+    await connectionDB();
+    app.use(cookieParser())
+    app.use('/user',userRouter)
+
+    app.use(globalErrorHandler)
+}
+
+===== E:\learn web development\hotel reception\src\config\database.js =====
+import mongoose from "mongoose";
+import { env } from "./env.js";
+export const connectionDB = async ()=>{
+    try{
+        await mongoose.connect(env.CONNECT_DATABASE);
+        console.log("Database is connected successfully");
+    }catch(err){
+        console.error("DB connection failed",err.message);
+        process.exit(1)
+    }
+}
+
+===== E:\learn web development\hotel reception\src\config\env.js =====
+import dotenv from 'dotenv'
+import Joi from 'joi'
+
+dotenv.config()
+
+const envSchema = Joi.object({
+    NODE_ENV: Joi.string().valid('development','production','test').default('development'),
+    PORT: Joi.number().default(7000),
+    CONNECT_DATABASE: Joi.string().required(),
+    ACCESS_TOKEN_SECRET: Joi.string().required(),
+    REFRESH_TOKEN_SECRET: Joi.string().required(),
+    ACCESS_TOKEN_EXPIRES_IN : Joi.string().default("15m"),
+    REFRESH_TOKEN_EXPIRES_IN: Joi.string().default("7d")
+}).unknown()
+
+const {error , value} = envSchema.validate(process.env);
+
+if(error){
+    console.error("Error in environment variable:",error);
+    process.exit(1)
+}
+
+export const env= value
+
+===== E:\learn web development\hotel reception\src\middleware\allowTo.js =====
+import { AppError } from "../util/AppError.js"
+
+export const allowTo =(...role)=>{
+    return (req,res,next)=>{
+        if(!role.includes(req.user.role)){
+            throw new AppError('forbidden',403)
+        }
+        next();
+    }
+}
+
+===== E:\learn web development\hotel reception\src\middleware\globaValidator.js =====
+
+export const validator = (schema)=>{
+    return (req , res , next)=>{
+        let errors = []
+        for( let key of ['body' , 'params' , 'query'] ){
+            if(!req[key] || !schema[key] ){continue;}
+            const {error , value} = schema[key].validate(req[key],{
+                abortEarly: false,
+                stripUnknown: true,
+                allowUnknown: false
+            })
+            if(error?.details?.length>0){
+                error.details.forEach(element => {
+                    errors.push({
+                        field:element.path.join('.'),
+                        message:element.message})
+                });
+            }else{
+                req[key]=value;
+            }
+        }
+
+        if(errors.length>0){
+            return res.status(400).json({success: false , message: "validator error", errors})
+        }
+
+        next();
+    }
+}
+
+===== E:\learn web development\hotel reception\src\middleware\verifyJWT.js =====
+import jwt from 'jsonwebtoken'
+import { AppError } from '../util/AppError.js';
+import { User } from '../models/user.js';
+import { env } from '../config/env.js';
+export const verifyJWT = async(req,res,next)=>{
+    const header = req.headers.authorization;
+    if(!header||!header.startsWith('Bearer')){
+        throw new AppError('unauthorized',401);
+    }
+    const token = header.split(' ')[1];
+    let decoded
+    try{
+        decoded = jwt.verify(token,env.ACCESS_TOKEN_SECRET);
+    }catch(err){
+        throw new AppError('invalid or expired token', 401);
+    }
+    const id = decoded.sub;
+    const foundUser =await User.findById(id);
+    if(!foundUser){
+        throw new AppError('user not found',401)
+    }
+    if(foundUser.isActive=== false){
+        throw new AppError('user is not active',401)
+    }
+    req.user= foundUser
+    next();
+}
+
+===== E:\learn web development\hotel reception\src\models\room.js =====
+import mongoose from "mongoose";
+
+const ROOM_TYPES = ["single","double","suite"]
+const ROOM_STATUSES  = ["active","maintenance"]
+
+const roomSchema = mongoose.Schema({
+    roomNumber:{
+        type:String,
+        required: [true, "roomNumber is required"],
+        unique:true,
+        trim:true,
+        minLength:[2,"roomNumber minimum length is 2"],
+        maxLength:[10,"roomNumber maximum length is 10"],
+        uppercase: true,
+        match: [/^[A-Za-z0-9-]+$/, "roomNumber may contain only letters, numbers and hyphens"]
+    },type:{
+        type:String,
+        required: [true, "type is required"],
+        enum: {values:ROOM_TYPES , message:"type must be single, double or suite"}
+    },capacity:{
+        type:Number,
+        required: [true, "capacity is required"],
+        min:[1,"capacity minimum is 1"],
+        max:[6,"capacity maximum is 6"],
+        validate:{
+            validator: Number.isInteger,
+            message: "capacity must be integer"
+        }
+    },nightlyRate:{
+        type:Number,
+        required:[true , "nightly is required"],
+        min:[1,"nightlyRate must be >=1"],
+        validate:{
+            validator: Number.isInteger,
+            message: "nightlyRate must be integer"
+        }
+    },floor:{
+        type:Number,
+        required:false,
+        min:[0,"floor minimum is 0"],
+        max:[50,"floor maximum is 50"],
+        validate:{
+            validator: (value)=> value == undefined || Number.isInteger(value) ,
+            message:"floor must be integer"
+        }
+    },amenities:{
+        type:[String],
+        default:[],
+        validate:{
+            validator:(arr)=> arr.length<=10,
+            message: "amenities can contain at most 10 items"
+        }
+    },status:{
+        type:String,
+        enum:ROOM_STATUSES,
+        default:ROOM_STATUSES[0]
+    },
+},{
+  timestamps:true  
+})
+
+
+export const roomModel = mongoose.model('room',roomSchema);
+
+===== E:\learn web development\hotel reception\src\models\user.js =====
+import mongoose from "mongoose";
+
+export const ROLES = ['admin','manager','receptionist']
+
+const userSchema = mongoose.Schema({
+    name:{
+        type:String,
+        required:true,
+        trim:true,
+        minLength:[3,"minimum length is 3"],
+        maxLength:[80,"maximum length is 80"]
+    },email:{
+        type:String,
+        required: true,
+        unique: true,
+        lowercase:true,
+        trim:true,
+        match:[
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please fill a valid email address'
+        ]
+    },
+    passwordHash:{
+        type:String,
+        required:true,
+        select:false,
+        // minlength:[8,'min length is 8'],
+    },role:{
+        type:String,
+        enum:ROLES,
+        required: true,
+        default:ROLES[2]
+    },isActive:{
+        type:Boolean,
+        default:false
+    }
+},{
+    timestamps:true
+})
+
+export const User = mongoose.model('user',userSchema);
+
+
+===== E:\learn web development\hotel reception\src\modules\auth\auth.controller.js =====
+
+===== E:\learn web development\hotel reception\src\modules\auth\auth.routes.js =====
+
+===== E:\learn web development\hotel reception\src\modules\auth\auth.service.js =====
+
+===== E:\learn web development\hotel reception\src\modules\user\user.controller.js =====
+import { validator } from "../../middleware/globaValidator.js";
+import { UserSignUpSchema } from "../../validators/user.js";
+import { Router } from "express";
+import * as userService from "./user.service.js";
+import { asyncHandler } from "../../util/asyncHandler.js";
+
+export const userRouter = Router();
+
+userRouter.post('/create',validator({body:UserSignUpSchema}),asyncHandler(userService.signUp))
+
+===== E:\learn web development\hotel reception\src\modules\user\user.service.js =====
+import { User } from "../../models/user.js";
+import { AppError } from "../../util/AppError.js";
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
+
+export const signUp = async(req,res)=>{
+    const {name, email,role , password} = req.body;
+    const foundUser =await User.findOne({email})
+    if(foundUser){
+        throw new AppError("user already exist",409);
+    }
+    const hashedPassword =await bcrypt.hash(password,10)
+    const created =await User.create({name,email,passwordHash:hashedPassword,role})
+    const {_id , name:cname , email:cmail , isActive ,role:crole} = created
+    res.status(201).json({success:true,message:"created",data:{id:_id, cname , cmail , isActive, crole}})
+}
+
+export const signIn = async(req,res)=>{
+    const {email,password}=req.body;
+    const foundUser =await User.findOne({email}).select('+passwordHash');
+    if(!foundUser){
+        throw new AppError("Invalid email or password",401);
+    }
+    if(foundUser.isActive==false){
+        throw new AppError("user is not active",401)
+    }
+    const confirm =await bcrypt.compare(password,foundUser.passwordHash);
+    if(!confirm){
+        throw new AppError("Invalid email or password",401);
+    }
+    const accessToken = jwt.sign({sub:foundUser._id , role:foundUser.role},process.env.ACCESS_TOKEN_SECRET,{
+        expiresIn:15*60
+    });
+    const refreshToken = jwt.sign({sub:foundUser._id , role:foundUser.role},process.env.REFRESH_TOKEN_SECRET,{
+        expiresIn:'7d'
+    })
+    res.cookie('jwt',refreshToken,{
+        httpOnly: true
+    })
+    res.status(200).json({
+        success:true,
+        message:"logged in successfully",
+        data:{
+            accessToken,
+             tokenType:"Bearer",
+             expiresIn:"15m",
+             user:{id:foundUser._id,name:foundUser.name,email:foundUser.email,role:foundUser.role}
+            }})
+}
+
+===== E:\learn web development\hotel reception\src\util\AppError.js =====
+export class AppError extends Error {
+    constructor(message , statusCode){
+        super(message);
+        this.statusCode= statusCode;
+        this.message = message;
+    }
+}
+
+===== E:\learn web development\hotel reception\src\util\asyncHandler.js =====
+
+export const asyncHandler = (func)=>{
+    return async (req ,res , next)=>{
+        try{
+           await func(req,res,next)
+        }catch(err){
+            next(err);
+        }
+    }
+}
+
+===== E:\learn web development\hotel reception\src\util\catchAsync.js =====
+
+===== E:\learn web development\hotel reception\src\util\globalErrorHandler.js =====
+
+export const globalErrorHandler = (err , req ,res , next)=>{
+    const statusCode = err.statusCode || 500;
+    const message = err.message || "internal server Error"
+    
+    return res.status(statusCode).json({message})
+}
+
+===== E:\learn web development\hotel reception\src\validators\auth.validator.js =====
+
+===== E:\learn web development\hotel reception\src\validators\common.validator.js =====
+import Joi from "joi";
+
+export const objectId = Joi.string().hex().length(24);
+
+===== E:\learn web development\hotel reception\src\validators\user.js =====
+import Joi from "joi";
+import { ROLES } from "../models/user.js";
+import { objectId } from "./common.validator.js";
+// let ROLE = [ 'manager' , 'receptionist']
+
+export const userId = Joi.object({
+    userId: objectId.required()
+})
+
+export const UserSignUpSchema = Joi.object({
+    name: Joi.string().min(3).max(80).required(),
+    email: Joi.string().email().lowercase().required(),
+    password: Joi.string().min(8).max(72).required(),
+    role: Joi.string().valid('receptionist', 'manager').default('receptionist'),
+    isActive: Joi.bool().default(false)
+})
+
+
+export const UserSingInSchema = Joi.object({
+    email: Joi.string().email().lowercase().required(),
+    password: Joi.string().min(8).max(72).trim().required()
+})

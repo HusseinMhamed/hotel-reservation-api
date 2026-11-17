@@ -6,7 +6,8 @@ export const validator = (schema)=>{
             if(!req[key] || !schema[key] ){continue;}
             const {error , value} = schema[key].validate(req[key],{
                 abortEarly: false,
-                // stripUnknown: true
+                stripUnknown: true,
+                allowUnknown: false
             })
             if(error?.details?.length>0){
                 error.details.forEach(element => {
