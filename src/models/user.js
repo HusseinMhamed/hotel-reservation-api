@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-
+import bcrypt from 'bcrypt'
 export const ROLES = ['admin','manager','receptionist']
 
 const userSchema = mongoose.Schema({
@@ -35,6 +35,19 @@ const userSchema = mongoose.Schema({
     }
 },{
     timestamps:true
+})
+
+userSchema.pre('save', async function (next){
+    try{
+
+        if(!this.isModified('passwordHash')){
+            return next();
+        }
+        this.passwordHash =await bcrypt.hash(this.passwordHash,10);
+        return next();
+    }catch(err){
+       return next(err);
+    }
 })
 
 export const User = mongoose.model('user',userSchema);

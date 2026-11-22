@@ -240,7 +240,7 @@ export const roomModel = mongoose.model('room',roomSchema);
 
 ===== E:\learn web development\hotel reception\src\models\user.js =====
 import mongoose from "mongoose";
-
+import bcrypt from 'bcrypt'
 export const ROLES = ['admin','manager','receptionist']
 
 const userSchema = mongoose.Schema({
@@ -276,6 +276,19 @@ const userSchema = mongoose.Schema({
     }
 },{
     timestamps:true
+})
+
+userSchema.pre('save', async function (next){
+    try{
+
+        if(!this.isModified('passwordHash')){
+            return next();
+        }
+        this.passwordHash =await bcrypt.hash(this.passwordHash,10);
+        return next();
+    }catch(err){
+       return next(err);
+    }
 })
 
 export const User = mongoose.model('user',userSchema);
@@ -354,8 +367,8 @@ export const signUp = async(req,res)=>{
     if(foundUser){
         throw new AppError("user already exist",409);
     }
-    const hashedPassword =await bcrypt.hash(password,10)
-    const created =await User.create({name,email,passwordHash:hashedPassword,role})
+    // const hashedPassword =await bcrypt.hash(password,10); 
+    const created =await User.create({name,email,passwordHash:password,role})
     const {_id , name:cname , email:cmail , isActive ,role:crole} = created
     res.status(201).json({success:true,message:"created",data:{id:_id, cname , cmail , isActive, crole}})
 }
