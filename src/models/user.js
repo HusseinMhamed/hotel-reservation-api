@@ -37,17 +37,12 @@ const userSchema = mongoose.Schema({
     timestamps:true
 })
 
-userSchema.pre('save', async function (next){
-    try{
+userSchema.pre('save', async function (){
 
         if(!this.isModified('passwordHash')){
-            return next();
+            return;
         }
         this.passwordHash =await bcrypt.hash(this.passwordHash,10);
-        return next();
-    }catch(err){
-       return next(err);
-    }
 })
 
 export const User = mongoose.model('user',userSchema);

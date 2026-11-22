@@ -89,7 +89,10 @@ const envSchema = Joi.object({
     ACCESS_TOKEN_SECRET: Joi.string().required(),
     REFRESH_TOKEN_SECRET: Joi.string().required(),
     ACCESS_TOKEN_EXPIRES_IN : Joi.string().default("15m"),
-    REFRESH_TOKEN_EXPIRES_IN: Joi.string().default("7d")
+    REFRESH_TOKEN_EXPIRES_IN: Joi.string().default("7d"),
+    SEED_ADMIN_NAME: Joi.string().required(),
+    SEED_ADMIN_EMAIL: Joi.string().email().required(),
+    SEED_ADMIN_PASSWORD: Joi.string().required()
 }).unknown()
 
 const {error , value} = envSchema.validate(process.env);
@@ -278,17 +281,13 @@ const userSchema = mongoose.Schema({
     timestamps:true
 })
 
-userSchema.pre('save', async function (next){
-    try{
+userSchema.pre('save', async function (){
 
         if(!this.isModified('passwordHash')){
-            return next();
+            return;
         }
         this.passwordHash =await bcrypt.hash(this.passwordHash,10);
-        return next();
-    }catch(err){
-       return next(err);
-    }
+        return;
 })
 
 export const User = mongoose.model('user',userSchema);
@@ -405,6 +404,38 @@ export const signIn = async(req,res)=>{
              user:{id:foundUser._id,name:foundUser.name,email:foundUser.email,role:foundUser.role}
             }})
 }
+
+===== E:\learn web development\hotel reception\src\scripts\seedAdmin.js =====
+import { User } from "../models/user.js";
+import mongoose from "mongoose";
+import { connectionDB } from "../config/database.js";
+import { env } from "../config/env.js";
+async function seedAdmin(){
+    try{
+        await connectionDB();
+        const userExists =await User.findOne({email:env.SEED_ADMIN_EMAIL})
+        if(userExists){
+            // console.log(userExits)
+            console.log("Admin already exist");
+            await mongoose.disconnect();
+            process.exit(0);
+        }
+        await User.create({name:env.SEED_ADMIN_NAME,
+        email:env.SEED_ADMIN_EMAIL,
+        passwordHash:env.SEED_ADMIN_PASSWORD,
+        role:"admin",
+        isActive:true})
+            console.log("admin created successfully")
+            await mongoose.disconnect();
+            process.exit(0);
+    }catch(err){
+        console.log("seeding admin Error:", err.message);
+        await mongoose.disconnect();
+        process.exit(1);
+    }
+}
+
+seedAdmin();
 
 ===== E:\learn web development\hotel reception\src\util\AppError.js =====
 export class AppError extends Error {

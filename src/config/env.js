@@ -10,7 +10,10 @@ const envSchema = Joi.object({
     ACCESS_TOKEN_SECRET: Joi.string().required(),
     REFRESH_TOKEN_SECRET: Joi.string().required(),
     ACCESS_TOKEN_EXPIRES_IN : Joi.string().default("15m"),
-    REFRESH_TOKEN_EXPIRES_IN: Joi.string().default("7d")
+    REFRESH_TOKEN_EXPIRES_IN: Joi.string().default("7d"),
+    SEED_ADMIN_NAME: Joi.string().required(),
+    SEED_ADMIN_EMAIL: Joi.string().email().required(),
+    SEED_ADMIN_PASSWORD: Joi.string().required()
 }).unknown()
 
 const {error , value} = envSchema.validate(process.env);
