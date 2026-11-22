@@ -51,12 +51,14 @@ app.listen(port,()=>{
 import { connectionDB } from "./config/database.js"
 import { userRouter } from "./modules/user/user.controller.js";
 import { globalErrorHandler } from "./util/globalErrorHandler.js";
+import { authRouter } from "./modules/auth/auth.controller.js";
 import cookieParser from "cookie-parser";
 export const bootstrab =async (app,express)=>{
     app.use(express.json());
     await connectionDB();
     app.use(cookieParser())
-    app.use('/user',userRouter)
+    // app.use('/user',userRouter)
+    app.use('/api/v1/auth',authRouter);
 
     app.use(globalErrorHandler)
 }
@@ -280,10 +282,54 @@ export const User = mongoose.model('user',userSchema);
 
 
 ===== E:\learn web development\hotel reception\src\modules\auth\auth.controller.js =====
+import { Router } from "express";
+import * as authService from './auth.service.js'
+import { asyncHandler } from "../../util/asyncHandler.js";
+import { validator } from "../../middleware/globaValidator.js";
+import { loginSchema } from "../../validators/auth.validator.js";
+export const authRouter = Router();
+
+authRouter.post('/login',validator({body:loginSchema}), asyncHandler(authService.login))
 
 ===== E:\learn web development\hotel reception\src\modules\auth\auth.routes.js =====
 
 ===== E:\learn web development\hotel reception\src\modules\auth\auth.service.js =====
+import { User } from "../../models/user.js";
+import { AppError } from "../../util/AppError.js";
+import {env} from '../../config/env.js'
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcrypt'
+export const login =async (req,res)=>{
+    const {email , password} = req.body;
+    const foundUser =await User.findOne({email}).select('+passwordHash')
+    if(!foundUser || foundUser?.isActive === false){
+        throw new AppError("Invalid credentials", 401);
+    }
+    const confirm =await bcrypt.compare(password , foundUser.passwordHash);
+    if(!confirm){
+        throw new AppError("Invalid credentials", 401);
+    }
+    const accessToken = jwt.sign({sub:foundUser._id,role:foundUser.role}, env.ACCESS_TOKEN_SECRET,{
+        expiresIn: env.ACCESS_TOKEN_EXPIRES_IN
+    })
+    const refreshToken = jwt.sign({sub:foundUser._id,role:foundUser.role},env.REFRESH_TOKEN_SECRET,{
+        expiresIn: env.REFRESH_TOKEN_EXPIRES_IN
+    })
+    res.cookie("refreshToken",refreshToken,{
+        httpOnly: true,
+        secure: env.NODE_ENV === "production"
+    });
+    res.status(200).json({
+        success:true,
+        message:"Logged in successfully",
+        data:{
+            accessToken,
+            tokenType:"Bearer",
+            expiresIn: env.ACCESS_TOKEN_EXPIRES_IN,
+            user: {id: foundUser._id, name : foundUser.name, email : foundUser.email ,role : foundUser.role}
+        }
+    })
+}
 
 ===== E:\learn web development\hotel reception\src\modules\user\user.controller.js =====
 import { validator } from "../../middleware/globaValidator.js";
@@ -380,6 +426,12 @@ export const globalErrorHandler = (err , req ,res , next)=>{
 }
 
 ===== E:\learn web development\hotel reception\src\validators\auth.validator.js =====
+import Joi from "joi";
+
+export const loginSchema = Joi.object({
+    email: Joi.string().email().lowercase().required(),
+    password: Joi.string().required()
+})
 
 ===== E:\learn web development\hotel reception\src\validators\common.validator.js =====
 import Joi from "joi";
